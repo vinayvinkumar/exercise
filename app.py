@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -42,12 +41,21 @@ def get_user_id(username):
     return c.fetchone()[0]
 
 # Streamlit app
+st.set_page_config(page_title="Daily Routine Tracker", page_icon=":bar_chart:", layout="centered")
 st.title("Daily Routine Tracker")
 
-menu = ["Add User", "Log Activity", "Insights"]
+menu = ["Home", "Add User", "Log Activity", "Insights"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-if choice == "Add User":
+if choice == "Home":
+    st.image("landing_page_image.jpg", use_column_width=True)
+    st.markdown("""
+        # Welcome to the Daily Routine Tracker!
+        This application helps you track your daily activities, including Workout, Junk Food, and Yoga. 
+        You can add multiple users, log daily activities, and visualize your progress over time.
+    """)
+
+elif choice == "Add User":
     st.subheader("Add New User")
     new_user = st.text_input("Username")
     if st.button("Add"):
@@ -59,15 +67,17 @@ elif choice == "Log Activity":
     username = st.selectbox("Select User", [row[0] for row in c.execute('SELECT username FROM users')])
     user_id = get_user_id(username)
     date = st.date_input("Date", datetime.today())
-    workout = st.radio("Workout", ("Yes", "No"))
-    junk_food = st.radio("Junk Food", ("Yes", "No"))
-    yoga = st.radio("Yoga", ("Yes", "No"))
+    
+    cols = st.columns(3)
+    workout = cols[0].checkbox("Workout")
+    junk_food = cols[1].checkbox("Junk Food")
+    yoga = cols[2].checkbox("Yoga")
     
     if st.button("Submit"):
         c.execute('''
         INSERT INTO activities (user_id, date, workout, junk_food, yoga)
         VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, date, workout, junk_food, yoga))
+        ''', (user_id, date, 'Yes' if workout else 'No', 'Yes' if junk_food else 'No', 'Yes' if yoga else 'No'))
         conn.commit()
         st.success("Activity logged successfully")
 
@@ -75,7 +85,7 @@ elif choice == "Insights":
     st.subheader("Insights")
     
     # Filter options
-    filter_option = st.selectbox("Filter by", ["Day", "Week", "Month", "Year"])
+    filter_option = st.selectbox("Filter by", ["Day", "Week", "Month"])
     username = st.selectbox("Select User", [row[0] for row in c.execute('SELECT username FROM users')])
     user_id = get_user_id(username)
     
@@ -84,26 +94,49 @@ elif choice == "Insights":
     df = pd.read_sql(query, conn, params=(user_id,))
     df['date'] = pd.to_datetime(df['date'])
     
-    if filter_option == "Day":
-        df = df[df['date'] == pd.to_datetime(datetime.today().date())]
-    elif filter_option == "Week":
-        df = df[df['date'].dt.isocalendar().week == datetime.today().isocalendar()[1]]
-    elif filter_option == "Month":
-        df = df[df['date'].dt.month == datetime.today().month]
-    elif filter_option == "Year":
-        df = df[df['date'].dt.year == datetime.today().year]
+    today = datetime.today().date()
     
-    # Visualization
-    if not df.empty:
-        melted_df = pd.melt(df, id_vars=['date'], value_vars=['workout', 'junk_food', 'yoga'], var_name='activity', value_name='status')
-        count_df = melted_df[melted_df['status'] == 'Yes'].groupby('activity').count().reset_index()
-        plt.figure(figsize=(10, 5))
-        sns.barplot(x='activity', y='status', data=count_df)
-        plt.title('Activity Insights')
-        plt.ylabel('Count')
-        plt.xlabel('Activity')
-        st.pyplot(plt)
-    else:
-        st.write("No data available for the selected period")
-        
+    if filter_option == "Day":
+        df_day = df[df['date'] == pd.to_datetime(today)]
+        if not df_day.empty:
+            workout = df_day['workout'].values[0]
+            junk_food = df_day['junk_food'].values[0]
+            yoga = df_day['yoga'].values[0]
+            st.write(f"Date: {today}")
+            st.write(f"Workout: {workout}")
+            st.write(f"Junk Food: {junk_food}")
+            st.write(f"Yoga: {yoga}")
+        else:
+            st.write(f"No data available for {today}")
+    
+    elif filter_option == "Week":
+        current_week = today.isocalendar()[1]
+        df_week = df[df['date'].dt.isocalendar().week == current_week]
+        if not df_week.empty:
+            total_days = df_week['date'].nunique()
+            workout_days = df_week[df_week['workout'] == 'Yes'].shape[0]
+            junk_food_days = df_week[df_week['junk_food'] == 'Yes'].shape[0]
+            yoga_days = df_week[df_week['yoga'] == 'Yes'].shape[0]
+            st.write(f"Week {current_week}")
+            st.write(f"Workout: {workout_days}/{total_days} days")
+            st.write(f"Junk Food: {junk_food_days}/{total_days} days")
+            st.write(f"Yoga: {yoga_days}/{total_days} days")
+        else:
+            st.write(f"No data available for week {current_week}")
+    
+    elif filter_option == "Month":
+        current_month = today.month
+        df_month = df[df['date'].dt.month == current_month]
+        if not df_month.empty:
+            total_days = df_month['date'].nunique()
+            workout_days = df_month[df_month['workout'] == 'Yes'].shape[0]
+            junk_food_days = df_month[df_month['junk_food'] == 'Yes'].shape[0]
+            yoga_days = df_month[df_month['yoga'] == 'Yes'].shape[0]
+            st.write(f"Month: {today.strftime('%B')}")
+            st.write(f"Workout: {workout_days}/{total_days} days")
+            st.write(f"Junk Food: {junk_food_days}/{total_days} days")
+            st.write(f"Yoga: {yoga_days}/{total_days} days")
+        else:
+            st.write(f"No data available for {today.strftime('%B')}")
+
 conn.close()
